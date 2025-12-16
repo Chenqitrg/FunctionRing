@@ -1,2 +1,2 @@
 # FunctionRing
-Basic analysis of function rings by Juli
+Basic analysis of function rings by Julia

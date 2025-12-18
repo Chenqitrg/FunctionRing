@@ -1,39 +1,46 @@
 # .github/workflows/ci.yml
 name: CI
 
-# Run the workflow on pushes and PRs to the default branches
 on:
   push:
-    branches: 'main'
+    branches: [ main, master ]
   pull_request:
-    branches: 'main'
+    branches: [ main, master ]
 
 jobs:
   test:
-    # What kind of VM to run on
     runs-on: ubuntu-latest
 
-    # Test against several Julia versions
     strategy:
       matrix:
-        julia-version: ['1.11']
+        julia-version: ['1.11']     # add '1.10', '1.9', 'nightly' if you like
 
     steps:
-      # 1) Get a copy of the repo
+      # 1. Check out the repository **into $GITHUB_WORKSPACE**
       - uses: actions/checkout@v4
 
-      # 2) Install Julia
+      # 2. Install Julia
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.julia-version }}
 
-      - name: Instantiate dependencies
-        run: julia --color=yes -e '
-          using Pkg;
-          Pkg.activate(".");
-          Pkg.instantiate();'
+      # 3. Instantiate (always from the repo root)
+      - name: Instantiate
+        working-directory: ${{ github.workspace }}
+        run: |
+          julia --color=yes -e '
+            using Pkg
+            Pkg.activate(".")
+            Pkg.instantiate()
+          '
 
-      - name: Run tests
-        run: julia --color=yes -e '
-          using Pkg;
-          Pkg.test(; coverage=true);'
+      # 4. Run the tests
+      - name: Test
+        working-directory: ${{ github.workspace }}
+        run: |
+          julia --color=yes -e '
+            using Pkg
+            Pkg.activate(".")             # activate package environment
+            Pkg.test("FunctionRing";      # specify the package explicitly
+                     coverage=true)
+          '

@@ -27,19 +27,13 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
 
-      # 3) Instantiate the package environment
       - name: Instantiate dependencies
         run: julia --color=yes -e '
           using Pkg;
           Pkg.activate(".");
           Pkg.instantiate();'
 
-      # 4) Run the tests
       - name: Run tests
         run: julia --color=yes -e '
           using Pkg;
           Pkg.test(; coverage=true);'
-
-      # 5) (Optional) Upload coverage to Coveralls
-      # - uses: julia-actions/julia-uploadcoveralls@v1
-      #   if: success() && github.event_name == 'push'

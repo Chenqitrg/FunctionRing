@@ -1,9 +1,9 @@
 using Test
 using FunctionRing
 
-println("---------")
+println("-")
 println("O")
-println("---------")
+println("-")
 
 setup = [
     O{Int}(2),
@@ -135,6 +135,11 @@ end
     end
 end
 
+@testset "Function inequality" begin
+    @test HoloPoly{Int,Int}([0, 1, 2, 3], [1, 2, 2, 1]) != HoloPoly{Int,Int}([0, 1, 2, 3], [1, 2, 2, 1], O{Int}(4))
+    @test HoloPoly{Int,Int}([0, 1, 2, 3], [1, 2, 2, 1]) == HoloPoly{Int,Int}([0, 1, 2, 3], [1, 2, 2, 1], O{Int}(Inf))
+end
+
 println("------------------------------")
 println("Function calculation: addition")
 println("------------------------------")
@@ -206,6 +211,8 @@ fun_multiplication = [
     HoloPoly{Int,Int}([0, 1], [1, 2])^4,
     HoloPoly{Int,Int}([0, 1], [1, 1])^4 + HoloPoly{Int,Int}(Int[], Int[], O{Int}(3)),
     (HoloPoly{Int,Int}([0], [1]) + HoloPoly{Int,Int}([1], [1]))^4,
+    (HoloPoly{Int,Float64}([0], [1.0]) + 1.5 * HoloPoly{Int,Float64}([1], [1.0]))^4,
+    (HoloPoly{Int,Float64}([0], [1.0]) + 1.5 * HoloPoly{Int,Float64}([1], [1.0]))^4 + HoloPoly{Int,Float64}(Int[2], Float64[2.5], O{Int}(3)),
 ]
 
 fun_multiplication_result = [
@@ -214,7 +221,9 @@ fun_multiplication_result = [
     HoloPoly{Int,Int}([0, 1, 2, 3, 4], [1, 4, 6, 4, 1]),
     HoloPoly{Int,Int}([0, 1, 2, 3, 4], [1, 4 * 2, 6 * 4, 4 * 8, 1 * 16]),
     HoloPoly{Int,Int}([0, 1, 2, 3], [1, 4, 6, 4], O{Int}(3)),
-    HoloPoly{Int,Int}([0, 1, 2, 3, 4], [1, 4, 6, 4, 1])
+    HoloPoly{Int,Int}([0, 1, 2, 3, 4], [1, 4, 6, 4, 1]),
+    HoloPoly{Int,Float64}([0, 1, 2, 3, 4], [1, 4 * 1.5, 6 * 1.5^2, 4 * 1.5^3, 1 * 1.5^4]),
+    HoloPoly{Int,Float64}([0, 1, 2], [1, 4 * 1.5, 6 * 1.5^2 + 2.5], O{Int}(3))
 ]
 
 @testset "Function multiplication" begin

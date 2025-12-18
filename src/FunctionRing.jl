@@ -42,11 +42,15 @@ end
 
 function Base.:*(v::Vector, f::O{R}) where {R}
     if length(v) == 0
-        return f
+        return O{R}(Inf)
     else
         raised_pow = R(minimum(v)) + f.trunc
         return O{R}(raised_pow)
     end
+end
+
+function Base.:*(f::O{R}, g::O{R}) where {R}
+    return O{R}(f.trunc + g.trunc)
 end
 
 struct HoloPoly{R,E}
@@ -144,7 +148,7 @@ end
 
 function Base.:*(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
     fg_power_vect = R[]
-    fg_trunc = f.power_vect * g.trunc + g.power_vect * f.trunc
+    fg_trunc = f.power_vect * g.trunc + g.power_vect * f.trunc + f.trunc * g.trunc
 
     for n_f in f.power_vect, n_g in g.power_vect
         temp_n = n_f + n_g
@@ -189,6 +193,31 @@ function evaluation(f::HoloPoly{R,E}, z::E) where {R,E}
         running_numb += z^n * f.coeff[i]
     end
     return running_numb
+end
+
+function Base.show(io::IO, f::HoloPoly{R,E}) where {R,E}
+    for (i, pow) in enumerate(f.power_vect)
+        if i != 1
+            print(io, " + ")
+        end
+        print(io, "$(f.coeff[i]) z^$(pow)")
+    end
+    if f.trunc.trunc != Inf
+        if !isempty(f.power_vect)
+            print(io, " + ")
+        end
+        print(io, "O[z^$(f.trunc.trunc)]")
+    end
+end
+
+function derivative(f::HoloPoly{R,E}) where {R,E}
+    inds_non_zero_pow = findall(x -> x != 0, f.power_vect)
+    new_power_vect = f.power_vect[inds_non_zero_pow]
+    new_coeff = E[]
+    for i in inds_non_zero_pow
+        push!(new_coeff, f.power_vect[i] * f.coeff[i])
+    end
+    return HoloPoly{R,E}(new_power_vect, new_coeff, O{R}(f.trunc.trunc - 1))
 end
 
 end

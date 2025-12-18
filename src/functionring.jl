@@ -1,5 +1,18 @@
+module FunctionRing
+
+export O, HoloPoly, evaluation
+
 struct O{R}
     trunc::Float64
+    function O{R}(x::Rational) where {R}
+        return new{R}(Float64(x))
+    end
+    function O{R}(x::Int) where {R}
+        return new{R}(Float64(x))
+    end
+    function O{R}(x::Float64) where {R}
+        return new{R}(x)
+    end
 end
 
 function Base.:+(f::O{R}, g::O{R}) where {R}
@@ -35,23 +48,29 @@ function Base.:*(v::Vector, f::O{R}) where {R}
     end
 end
 
-struct HoloPoly{R, E}
+struct HoloPoly{R,E}
     power_vect::Vector{R}
     coeff::Vector{E}
     trunc::O{R}
 
-    function HoloPoly{R, E}(power_vect::Vector{R}, coeff::Vector{E}) where {R, E}
-        new{R, E}(power_vect, coeff, O{R}(Inf))
-    end
-    function HoloPoly{R, E}(power_vect::Vector{R}, coeff::Vector{E}, trunc::Float64) where {R, E}
-        new{R, E}(power_vect, coeff, O{R}(trunc))
-    end
-    function HoloPoly{R, E}(power_vect::Vector{R}, coeff::Vector{E}, trunc::O{R}) where {R, E}
-        new{R, E}(power_vect, coeff, trunc)
+    function HoloPoly{R,E}(power_vect::Vector{R}, coeff::Vector{E}, trunc::O{R}) where {R,E}
+        perm = sortperm(power_vect)
+        new_pow = power_vect[perm]
+        new_coeff = coeff[perm]
+        trunc_pow = filter(x -> x < trunc, new_pow)
+        return new{R,E}(trunc_pow, new_coeff[1:length(trunc_pow)], trunc)
     end
 end
 
-function Base.getindex(f::HoloPoly{R, E}, i::R) where {R, E}
+function HoloPoly{R,E}(power_vect::Vector{R}, coeff::Vector{E}) where {R,E}
+    return HoloPoly{R,E}(power_vect, coeff, O{R}(Inf))
+end
+
+function HoloPoly{R,E}(power_vect::Vector{R}, coeff::Vector{E}, trunc::Float64) where {R,E}
+    return new{R,E}(power_vect, coeff, O{R}(trunc))
+end
+
+function Base.getindex(f::HoloPoly{R,E}, i::R) where {R,E}
     if i > f.trunc
         throw(ArgumentError("No higher element"))
     else
@@ -64,7 +83,7 @@ function Base.getindex(f::HoloPoly{R, E}, i::R) where {R, E}
     end
 end
 
-function Base.setindex!(f::HoloPoly{R, E}, setcoeff::E, n::R) where {R, E}
+function Base.setindex!(f::HoloPoly{R,E}, setcoeff::E, n::R) where {R,E}
     if n in f.power_vect
         i = findfirst(x -> x == n, f.power_vect)
         f.coeff[i] = setcoeff
@@ -74,43 +93,51 @@ function Base.setindex!(f::HoloPoly{R, E}, setcoeff::E, n::R) where {R, E}
     end
 end
 
-function power_increasing(f::HoloPoly{R, E}) where {R, E}
+function power_increasing(f::HoloPoly{R,E}) where {R,E}
     perm = sortperm(f.power_vect)
     new_pow = f.power_vect[perm]
     new_coeff = f.coeff[perm]
     trunc_pow = filter(x -> x < f.trunc, new_pow)
-    return HoloPoly{R, E}(trunc_pow, new_coeff[1:length(trunc_pow)], f.trunc)
+    return HoloPoly{R,E}(trunc_pow, new_coeff[1:length(trunc_pow)], f.trunc)
 end
 
-function zero_filter(f::HoloPoly{R, E}; tol = 1e-14) where {R, E}
+function zero_filter(f::HoloPoly{R,E}; tol=1e-14) where {R,E}
     indices = findall(x -> abs(x) > tol, f.coeff)
-    return HoloPoly{R, E}(f.power_vect[indices], f.coeff[indices], f.trunc)
+    return HoloPoly{R,E}(f.power_vect[indices], f.coeff[indices], f.trunc)
 end
 
-function Base.:+(f::HoloPoly{R, E}, g::HoloPoly{R, E}) where {R, E}
+function Base.:+(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
     new_trunc = f.trunc + g.trunc
     new_power_vect = filter(x -> x < new_trunc, union(f.power_vect, g.power_vect))
     new_coeff = zeros(E, length(new_power_vect))
     for (i, n) in enumerate(new_power_vect)
-       new_coeff[i] = f[n] + g[n]
+        new_coeff[i] = f[n] + g[n]
     end
-    return zero_filter(power_increasing(HoloPoly{R, E}(new_power_vect, new_coeff, new_trunc)))
+    return zero_filter(power_increasing(HoloPoly{R,E}(new_power_vect, new_coeff, new_trunc)))
 end
 
-function Base.:-(f::HoloPoly{R, E}, g::HoloPoly{R, E}) where {R, E}
+function Base.:-(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
     new_power_vect = union(f.power_vect, g.power_vect)
     new_coeff = zeros(E, length(new_power_vect))
     for (i, n) in enumerate(new_power_vect)
-       new_coeff[i] = f[n] - g[n]
+        new_coeff[i] = f[n] - g[n]
     end
-    return zero_filter(power_increasing(HoloPoly{R, E}(new_power_vect, new_coeff, f.trunc + g.trunc)))
+    return zero_filter(power_increasing(HoloPoly{R,E}(new_power_vect, new_coeff, f.trunc + g.trunc)))
 end
 
-function Base.:-(f::HoloPoly{R, E}) where {R, E}
-    return zero_filter(power_increasing(HoloPoly{R, E}(f.power_vect, -f.coeff, f.trunc)))
+function Base.:-(f::HoloPoly{R,E}) where {R,E}
+    return zero_filter(power_increasing(HoloPoly{R,E}(f.power_vect, -f.coeff, f.trunc)))
 end
 
-function Base.:*(f::HoloPoly{R, E}, g::HoloPoly{R, E}) where {R, E}
+function _iszero(f::HoloPoly{R,E}) where {R,E}
+    return f.power_vect == R[] && f.coeff == E[]
+end
+
+function Base.:(==)(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
+    return _iszero(f - g)
+end
+
+function Base.:*(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
     fg_power_vect = R[]
     fg_trunc = f.power_vect * g.trunc + g.power_vect * f.trunc
 
@@ -130,16 +157,16 @@ function Base.:*(f::HoloPoly{R, E}, g::HoloPoly{R, E}) where {R, E}
             continue
         end
     end
-    return zero_filter(power_increasing(HoloPoly{R, E}(fg_power_vect, fg_coeff, fg_trunc)))
+    return zero_filter(power_increasing(HoloPoly{R,E}(fg_power_vect, fg_coeff, fg_trunc)))
 end
 
-function Base.:*(a::E, f::HoloPoly{R, E}) where {R, E}
-    return zero_filter(power_increasing(HoloPoly{R, E}(f.power_vect, a * f.coeff, f.trunc)))
+function Base.:*(a::E, f::HoloPoly{R,E}) where {R,E}
+    return zero_filter(power_increasing(HoloPoly{R,E}(f.power_vect, a * f.coeff, f.trunc)))
 end
 
-function Base.:^(f::HoloPoly{R, E}, n::Int) where {R, E}
+function Base.:^(f::HoloPoly{R,E}, n::Int) where {R,E}
     if n == 0
-        return HoloPoly{R, E}([0], [E(1)])
+        return HoloPoly{R,E}([0], [E(1)])
     else
         running_f = f
         power = 1
@@ -151,7 +178,7 @@ function Base.:^(f::HoloPoly{R, E}, n::Int) where {R, E}
     end
 end
 
-function evaluation(f::HoloPoly{R, E}, z::E) where {R, E}
+function evaluation(f::HoloPoly{R,E}, z::E) where {R,E}
     running_numb = E(0)
     for (i, n) in enumerate(f.power_vect)
         running_numb += z^n * f.coeff[i]
@@ -159,27 +186,4 @@ function evaluation(f::HoloPoly{R, E}, z::E) where {R, E}
     return running_numb
 end
 
-f = HoloPoly{Int, Float64}([0, 2, 1, 3, 4], [1.0, 2.0, 1.2, 0.5,3.0])
-# # power_increasing(f)
-
-g = HoloPoly{Int, Float64}([0, 1, 3, 5], [1.5, 2.0, 4.2, 3.0], O{Int}(8.0))
-
-# # 0.0 * f
-
-# f + g
-
-g * g * g
-
-g^3
-
-evaluation(f, 0.5)
-
-
-# (f - g) * g * f
-# O{Int}(3.0)
-
-# HoloPoly{Int64, Float64}([0, 2, 1], ComplexF64[2.5 + 0.0im, 2.0 + 0.0im, 3.2 + 0.0im], O{Int64}(3.0))
-# function Base.:*(a::R, f::HoloPoly{R}) where {R}
-#     newf = copy(f)
-
-# end
+end

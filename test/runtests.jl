@@ -313,3 +313,8 @@ println("-----------")
     @test (h + 2 * f) ∘ g == h ∘ g + 2 * f ∘ g
     @test (hh + 2 * f) ∘ gg == hh ∘ gg + 2 * f ∘ gg
 end
+
+
+println("------------")
+println("Witt algebra")
+println("------------")

@@ -242,7 +242,7 @@ function Witt_action(n::Int, f::HoloPoly{R,E}) where {R,E} # TODO: Test
     return -g * derivative(f)
 end
 
-function Base.:∘(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E} # TODO: Test
+function Base.:∘(f::HoloPoly{R,E}, g::HoloPoly{R,E}) where {R,E}
     fg0 = zero(R, E)
     for (pow, coeff) in zip(f.power_vect, f.coeff)
         fg0 = fg0 + coeff * g^pow

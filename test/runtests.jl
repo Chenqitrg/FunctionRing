@@ -292,3 +292,24 @@ println("----------")
     @test derivative(f + k) == derivative(f) + derivative(k)
     @test derivative(f + k, 3) == derivative(f, 3) + derivative(k, 3)
 end
+
+println("-----------")
+println("Composition")
+println("-----------")
+
+@testset "Composition" begin
+    f = HoloPoly{Int,Int}([2], [1])
+    g = HoloPoly{Int,Int}([3], [1])
+    h = HoloPoly{Int,Int}([0, 1], [1, 1])
+    gg = HoloPoly{Int,Int}([3], [1], O{Int}(4))
+    hh = HoloPoly{Int,Int}([0, 1], [1, 1], O{Int}(3))
+    @test f ∘ f == HoloPoly{Int,Int}([4], [1])
+    @test f ∘ g == HoloPoly{Int,Int}([6], [1])
+    @test g ∘ g == HoloPoly{Int,Int}([9], [1])
+    @test f ∘ h == HoloPoly{Int,Int}([0, 1, 2], [1, 2, 1])
+    @test g ∘ h == HoloPoly{Int,Int}([0, 1, 2, 3], [1, 3, 3, 1])
+    @test h ∘ f == HoloPoly{Int,Int}([0, 2], [1, 1])
+    @test h ∘ h == HoloPoly{Int,Int}([0, 1], [2, 1])
+    @test (h + 2 * f) ∘ g == h ∘ g + 2 * f ∘ g
+    @test (hh + 2 * f) ∘ gg == hh ∘ gg + 2 * f ∘ gg
+end

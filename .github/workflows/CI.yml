@@ -41,6 +41,6 @@ jobs:
           julia --color=yes -e '
             using Pkg
             Pkg.activate(".")             # activate package environment
-            Pkg.test("FunctionRing";      # specify the package explicitly
+            Pkg.test("ConformalCalculator";      # specify the package explicitly
                      coverage=true)
           '

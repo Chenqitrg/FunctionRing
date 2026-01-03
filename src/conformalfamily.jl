@@ -145,17 +145,28 @@ function once_canonicalize(b::DescendentBasis)
     return vector
 end
 
-function Base.getindex(mat::SparseMatrixCSC{E, Int64}, row::DescendentBasis, col::DescendentBasis) where {E}
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::DescendentBasis, col::DescendentBasis) where {E}
     rowind, colind = to_conformal_index(row), to_conformal_index(col)
     return mat[rowind[2], colind[2]]
 end
-function Base.setindex!(mat::SparseMatrixCSC{E, Int64}, ele::E, row::DescendentBasis, col::DescendentBasis) where {E}
+
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::DescendentBasis, ::Colon) where {E}
+    rowind = to_conformal_index(row)
+    return mat[rowind[2], :]
+end
+
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, ::Colon, col::DescendentBasis) where {E}
+    colind = to_conformal_index(col)
+    return mat[:, colind[2]]
+end
+
+function Base.setindex!(mat::SparseMatrixCSC{E,Int64}, ele::E, row::DescendentBasis, col::DescendentBasis) where {E}
     rowind = to_conformal_index(row)
     colind = to_conformal_index(col)
     mat[rowind[2], colind[2]] = ele
 end
 
-function vira_generator_level_solver(h::Float64, c::Float64, col_level::Int, operator_level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64, Int64}}})
+function vira_generator_level_solver(h::Float64, c::Float64, col_level::Int, operator_level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
     if col_level == 1 && operator_level == 1
         return sparse([2 * h;;])
     end
@@ -166,7 +177,7 @@ function vira_generator_level_solver(h::Float64, c::Float64, col_level::Int, ope
     for col in col_basis
         highest_operator, highestpower = col.basis[1]
         remaining_col = DescendentBasis([highest_operator => highestpower - 1; col.basis[2:end]...])
-        remaining_level = level(remaining_col)
+        remaining_level = col_level + highest_operator
         new_leading_operator = operator_level + highest_operator
 
         if new_leading_operator > 0
@@ -194,8 +205,8 @@ function vira_generator_level_solver(h::Float64, c::Float64, col_level::Int, ope
     return matrix
 end
 
-function vira_level_solver(h::Float64, c::Float64, level_number::Int, reps::Vector{Vector{SparseMatrixCSC{Float64, Int64}}})
-    matrix_vector = SparseMatrixCSC{Float64, Int64}[]
+function vira_level_solver(h::Float64, c::Float64, level_number::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
+    matrix_vector = SparseMatrixCSC{Float64,Int64}[]
     for vira_n in 1:level_number
         matrix = vira_generator_level_solver(h, c, level_number, vira_n, reps)
         push!(matrix_vector, matrix)
@@ -204,10 +215,35 @@ function vira_level_solver(h::Float64, c::Float64, level_number::Int, reps::Vect
 end
 
 function vira_iter_solver(h::Float64, c::Float64, trunc_level::Int)
-    reps = Vector{SparseMatrixCSC{Float64, Int64}}[]
+    reps = Vector{SparseMatrixCSC{Float64,Int64}}[]
     for level_number in 1:trunc_level
         matrices = vira_level_solver(h, c, level_number, reps)
         push!(reps, matrices)
     end
     return reps
+end
+
+function gram_matrix_level(level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}}, gram_lower::Vector{SparseMatrixCSC{Float64,Int64}})
+    basis = CANONICALBASIS[level+1]
+    dim = length(basis)
+    gram = spzeros(Float64, dim, dim)
+    for bra in basis, ket in basis
+        level == 0 && (gram[bra, ket] = 1.0; continue)
+        highest_level_bra, highest_power_bra = bra.basis[1]
+        remaining_bra = DescendentBasis([highest_level_bra => highest_power_bra - 1; bra.basis[2:end]...])
+        remaining_bra_level = level + highest_level_bra
+        actioning_operator = -highest_level_bra
+
+        gram[bra, ket] = dot(gram_lower[remaining_bra_level+1][remaining_bra, :], reps[level][actioning_operator][:, ket])
+    end
+    return gram
+end
+
+function gram_matrix(reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
+    gram_lower = SparseMatrixCSC{Float64,Int64}[]
+    for level in 0:length(reps)
+        gram = gram_matrix_level(level, reps, gram_lower)
+        push!(gram_lower, gram)
+    end
+    return gram_lower
 end

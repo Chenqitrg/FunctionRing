@@ -79,3 +79,21 @@ end
     vira_iter_solver(0.0, 1/2, 10)
     @test true
 end
+
+expected_ranks_1 = [1, 0, 1, 1, 2, 2, 3, 3, 5, 5, 7]
+expected_ranks_ψ = [1, 1, 1, 1, 2, 2, 3, 4, 5, 6, 8]
+expected_ranks_σ = [1, 1, 1, 2, 2, 3, 4, 5, 6, 8, 10]
+@testset "Gram matrix" begin
+    reps_1 = vira_iter_solver(0.0, 1 / 2, 10)
+    gram_matrices_1 = gram_matrix(reps_1)
+
+    reps_ψ = vira_iter_solver(1 / 2, 1 / 2, 10)
+    gram_matrices_ψ = gram_matrix(reps_ψ)
+
+    reps_σ = vira_iter_solver(1 / 16, 1 / 2, 10)
+    gram_matrices_σ = gram_matrix(reps_σ)
+
+    @show map(x->rank(Matrix(x), rtol=1e-12), gram_matrices_1)
+    @show map(x->rank(Matrix(x), rtol=1e-12), gram_matrices_ψ)
+    @show map(x->rank(Matrix(x), rtol=1e-12), gram_matrices_σ) # **** WARNING: STILL BUG!!!! Maybe the representation of level 6 are wrong!!!! ****
+end

@@ -1,105 +1,44 @@
-struct DescendentBasis
-    basis::Vector{Pair{Int,Int}}
-    function DescendentBasis(v::Vector{Pair{Int,Int}})
-        return new(filter(x -> x[2] != 0, v))
-    end
-end
+level(v::Vector{Int}) = -sum(v)
+left_action(n::Int, v::Vector{Int}) = [n; v...]
+iscanonical(v::Vector{Int}) = isempty(v) || (issorted(v; lt=(<)) && v[end] < 0)
+canonicalbasis(n::Integer) = n == 0 ? (Int[],) : (.-p for p in partitions(n))
+dim_level(level::Integer) = length(partitions(level))
 
-function level(v::Vector{Pair{Int,Int}})
-    return isempty(v) ? 0 : sum(-i * n for (i, n) in v)
-end
-level(v::DescendentBasis) = level(v.basis)
-
-Base.:(==)(u::DescendentBasis, v::DescendentBasis) = u.basis == v.basis
-Base.hash(x::DescendentBasis, h::UInt) = hash(x.basis, h)
-
-function left_action(n::Int, b::DescendentBasis)
-    if isempty(b.basis)
-        return DescendentBasis([n => 1])
-    end
-    leading_level, leading_power = b.basis[1]
-    if leading_level == n
-        return DescendentBasis([leading_level => leading_power + 1; b.basis[2:end]...])
-    else
-        return DescendentBasis([n => 1; b.basis...])
-    end
-end
-
-function iscanonical(b::DescendentBasis)
-    return isempty(b.basis) || (issorted(map(x -> x[1], b.basis); lt=(<)) && b.basis[end][1] < 0) && unique(map(x -> x[1], b.basis)) == map(x -> x[1], b.basis)
-end
-
-function iscanonical(bs::Vector{DescendentBasis})
+function iscanonical(bs::Vector{Vector{Int}})
     level_first = level(bs[1])
     return all(level(x) == level_first && iscanonical(x) for x in bs)
 end
 
-function _canonical_upperbound(n::Int, bound::Int)
-    if bound == 1
-        return [[-1 => n]]
-    elseif n == 0 && bound == 0
-        return Vector{Pair{Int,Int}}[]
-    end
-    basis = Vector{Pair{Int,Int}}[]
-    for power in 0:n÷bound
-        temp_pair = [-bound => power]
-        remaining = n - power * bound
-        if remaining == 0
-            push!(basis, temp_pair)
-        else
-            remaining_results = _canonical_upperbound(remaining, minimum([bound - 1, remaining]))
-            append!(basis, map(x -> [temp_pair; x...], remaining_results))
-        end
-    end
-    return basis
-end
-
-function _to_vector(v::Vector{Pair{Int,Int}})
-    level_v = level(v)
-    vector_v = zeros(Int, level_v)
-    if level_v == 0
-        return vector_v
-    end
-    for n in -level_v:-1
-        pair = findfirst(x -> x[1] == n, v)
-        vector_v[level_v+n+1] = pair === nothing ? 0 : v[pair][2]
-    end
-    return vector_v
-end
-
-weight_key(v::Vector{Pair{Int,Int}}) = (level(v), _to_vector(v))
-
-function canonicalbasis(n::Int)
-    if n == 0
-        return [DescendentBasis(Pair{Int,Int}[])]
-    else
-        return map(DescendentBasis, sort(_canonical_upperbound(n, n); by=weight_key, rev=true))
-    end
-end
-
-canonicalbasis_plain(n::Int) = map(x -> x.basis, canonicalbasis(n))
-
-function to_conformal_index(b::DescendentBasis)
+function to_conformal_index(b::Vector{Int})
     level_b = level(b)
-    i = findfirst(==(b), CANONICALBASIS[level_b+1])
-    return level_b, i
+    i = 1
+    for p in canonicalbasis(level_b)
+        p == b && return level_b, i
+        i += 1
+    end
+    return nothing
 end
 
 struct Descendent{E}
-    basis::Vector{DescendentBasis}
+    basis::Vector{Vector{Int}}
     vector::Vector{E}
 end
 
-function Descendent{E}(basis::Vector{Vector{Pair{Int,Int}}}, vector) where {E}
-    return Descendent{E}(map(DescendentBasis, basis), vector)
+function Descendent{E}(level::Int, vector::SparseVector{E,Int64}) where {E}
+    I = vector.nzind
+    vals = vector.nzval
+    basis = Vector{Int}[]
+    for (i, p) in enumerate(canonicalbasis(level))
+        (i in I) && push!(basis, p)
+    end
+    return Descendent{E}(basis[I], vals)
 end
 
 function Base.:(==)(f::Descendent{E}, g::Descendent{E}) where {E}
     return f.basis == g.basis && f.vector == g.vector
 end
 
-
-function Base.getindex(f::Descendent{E}, v::DescendentBasis) where {E}
+function Base.getindex(f::Descendent{E}, v::Vector{Int}) where {E}
     i = findfirst(==(v), f.basis)
     return i === nothing ? zero(E) : f.vector[i]
 end
@@ -126,19 +65,15 @@ function iscanonical(f::Descendent{E}) where {E}
     return all(iscanonical(b) && level(b) == level_f for b in f.basis)
 end
 
-function once_canonicalize(b::DescendentBasis)
-    if iscanonical(b)
-        return Descendent([b], [1.0])
-    elseif b.basis[1][1] == b.basis[2][1]
-        newbasis = DescendentBasis([b.basis[1][1] => b.basis[1][2] + b.basis[2][2]; b.basis[3:end]...])
-        return Descendent([newbasis], [1.0])
-    end
-    first_level, first_power = b.basis[1]
-    second_level, second_power = b.basis[2]
-    newbasis1 = DescendentBasis([[first_level + second_level => 1, second_level => second_power - 1]; b.basis[3:end]...])
+function once_canonicalize(b::Vector{Int})
+    !(b[1] < 0 && iscanonical(b[2:end])) && throw(ArgumentError("The vector $b is not suitable for once_canonicalize"))
+    iscanonical(b) && return Descendent([b], [1.0])
+    first_level = b[1]
+    second_level = b[2]
+    newbasis1 = [first_level + second_level; b[3:end]...]
     vector = Descendent([newbasis1], [Float64(first_level - second_level)])
 
-    newbasis2 = DescendentBasis([[first_level => 1, second_level => second_power - 1]; b.basis[3:end]...])
+    newbasis2 = [first_level; b[3:end]...]
     shuffle1 = once_canonicalize(newbasis2)
     for basis2 in shuffle1.basis
         shuffle2 = shuffle1[basis2] * once_canonicalize(left_action(second_level, basis2))
@@ -147,70 +82,76 @@ function once_canonicalize(b::DescendentBasis)
     return vector
 end
 
-function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::DescendentBasis, col::DescendentBasis) where {E}
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::Vector{Int}, col::Vector{Int}) where {E}
     rowind, colind = to_conformal_index(row), to_conformal_index(col)
     return mat[rowind[2], colind[2]]
 end
 
-function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::DescendentBasis, ::Colon) where {E}
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, row::Vector{Int}, ::Colon) where {E}
     rowind = to_conformal_index(row)
     return mat[rowind[2], :]
 end
 
-function Base.getindex(mat::SparseMatrixCSC{E,Int64}, ::Colon, col::DescendentBasis) where {E}
+function Base.getindex(mat::SparseMatrixCSC{E,Int64}, ::Colon, col::Vector{Int}) where {E}
     colind = to_conformal_index(col)
     return mat[:, colind[2]]
 end
 
-function Base.getindex(vec::SparseVector{E,Int64}, ind::DescendentBasis) where {E}
+function Base.getindex(vec::SparseVector{E,Int64}, ind::Vector{Int}) where {E}
     i = to_conformal_index(ind)
     return vec[i[2]]
 end
 
-function Base.setindex!(mat::SparseMatrixCSC{E,Int64}, ele::E, row::DescendentBasis, col::DescendentBasis) where {E}
+function Base.setindex!(mat::SparseMatrixCSC{E,Int64}, ele::E, row::Vector{Int}, col::Vector{Int}) where {E}
     rowind = to_conformal_index(row)
     colind = to_conformal_index(col)
     mat[rowind[2], colind[2]] = ele
 end
 
-function Base.setindex!(vec::SparseVector{E,Int64}, ele::E, ind::DescendentBasis) where {E}
+function Base.setindex!(vec::SparseVector{E,Int64}, ele::E, ind::Vector{Int}) where {E}
     i = to_conformal_index(ind)
     vec[i[2]] = ele
 end
 
-function vira_generator_level_col_solver(h::Float64, c::Float64, col::DescendentBasis, operator_level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
+function vira_generator_level_col_solver(h::Float64, c::Float64, col::Vector{Int}, operator_level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
     col_level = level(col)
+    (col_level == 1 && operator_level == 1) && return sparse([2 * h])
     row_level = col_level - operator_level
-    row_basis = CANONICALBASIS[row_level+1]
+    row_dim = dim_level(row_level)
 
-    vector = spzeros(Float64, length(row_basis))
-    if col_level == 1 && operator_level == 1
-        return sparse([2 * h])
-    end
-    highest_operator, highestpower = col.basis[1]
-    remaining_col = DescendentBasis([highest_operator => highestpower - 1; col.basis[2:end]...])
+    highest_operator = col[1]
+    remaining_col = col[2:end]
     remaining_level = col_level + highest_operator
     new_leading_operator = operator_level + highest_operator
 
     if new_leading_operator > 0
-        for row in row_basis
-            vector[row] = (operator_level - highest_operator) * reps[remaining_level][new_leading_operator][row, remaining_col]
-        end
+        vector = (operator_level - highest_operator) * reps[remaining_level][new_leading_operator][:, remaining_col]
     elseif new_leading_operator == 0
-        vector[remaining_col] = (operator_level - highest_operator) * (h + remaining_level) + c / 12 * (operator_level^3 - operator_level)
+        vector = sparsevec([to_conformal_index(remaining_col)[2]], (operator_level - highest_operator) * (h + remaining_level) + c / 12 * (operator_level^3 - operator_level), row_dim)
     else
         canonicalized_basis = once_canonicalize(left_action(new_leading_operator, remaining_col))
-        for row in row_basis
-            vector[row] = (operator_level - highest_operator) * canonicalized_basis[row]
+        inds = Int[]
+        vals = Float64[]
+        for row_vec in canonicalized_basis.basis
+            row_val = (operator_level - highest_operator) * canonicalized_basis[row_vec]
+            if row_val != 0
+                push!(inds, to_conformal_index(row_vec)[2])
+                push!(vals, row_val)
+            end
         end
+        vector = sparsevec(inds, vals, row_dim)
     end
 
     remaining_shifted_level = remaining_level - operator_level
     remaining_shifted_level < 0 && return vector
 
-    for reduced_row in CANONICALBASIS[remaining_shifted_level+1]
-        second_canonicalized_basis = reps[remaining_level][operator_level][reduced_row, remaining_col] * once_canonicalize(left_action(highest_operator, reduced_row))
-        for row in row_basis
+    remaining_action_mat = reps[remaining_level][operator_level]
+    j = to_conformal_index(remaining_col)[2]
+    i_s = remaining_action_mat.rowval[remaining_action_mat.colptr[j] : remaining_action_mat.colptr[j+1] - 1]
+    for (i,reduced_row) in enumerate(canonicalbasis(remaining_shifted_level))
+        !(i in i_s) && continue
+        second_canonicalized_basis = remaining_action_mat[i, j] * once_canonicalize(left_action(highest_operator, reduced_row))
+        for row in second_canonicalized_basis.basis
             vector[row] += second_canonicalized_basis[row]
         end
     end
@@ -218,16 +159,33 @@ function vira_generator_level_col_solver(h::Float64, c::Float64, col::Descendent
 end
 
 function vira_generator_level_solver(h::Float64, c::Float64, col_level::Int, operator_level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
-    col_basis = CANONICALBASIS[col_level+1]
-    vectors = [vira_generator_level_col_solver(h, c, col, operator_level, reps) for col in col_basis]
-    matrix = hcat(vectors...)
-    return matrix
+    colptr = Int[1]
+    rowind = Int[]
+    nzval = Float64[]
+
+    nnz = 0
+    for col in canonicalbasis(col_level)
+        v = vira_generator_level_col_solver(h, c, col, operator_level, reps)
+        # println("$col has been obtained")
+        append!(rowind, v.nzind)
+        append!(nzval, v.nzval)
+
+        nnz += length(v.nzind)
+        push!(colptr, nnz + 1)
+    end
+
+    nrow = length(partitions(col_level - operator_level))
+    ncol = length(colptr) - 1
+
+    M = SparseMatrixCSC(nrow, ncol, colptr, rowind, nzval)
+    return M
 end
 
 function vira_level_solver(h::Float64, c::Float64, level_number::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
     matrix_vector = SparseMatrixCSC{Float64,Int64}[]
     for vira_n in 1:level_number
-        matrix = vira_generator_level_solver(h, c, level_number, vira_n, reps)
+        @time matrix = vira_generator_level_solver(h, c, level_number, vira_n, reps)
+        println("level $level_number operator $vira_n has been calculated")
         push!(matrix_vector, matrix)
     end
     return matrix_vector
@@ -243,18 +201,18 @@ function vira_iter_solver(h::Float64, c::Float64, trunc_level::Int)
 end
 
 function _vira_block_embedding(rep_mats::Vector{SparseMatrixCSC{Float64,Int64}}, operator_level::Int, trunc_level::Int)
-    dim_row = sum(length(CANONICALBASIS[level+1]) for level in 0:trunc_level)
+    dim_row = sum(dim_level(level) for level in 0:trunc_level)
     dim_col = dim_row
     block_mat = spzeros(Float64, dim_row, dim_col)
-    col_offset = sum(length(CANONICALBASIS[level+1]) for level in 0:operator_level-1)
+    col_offset = sum(dim_level(level) for level in 0:operator_level-1)
     row_offset = 0
     for col_level in operator_level:trunc_level
         row_level = col_level - operator_level
-        row_dim = length(CANONICALBASIS[row_level+1])
-        col_dim = length(CANONICALBASIS[col_level+1])
+        row_dim = dim_level(row_level)
+        col_dim = dim_level(col_level)
         block_mat[row_offset.+(1:row_dim), col_offset.+(1:col_dim)] = rep_mats[col_level-operator_level+1]
-        col_offset += length(CANONICALBASIS[col_level+1])
-        row_offset += length(CANONICALBASIS[row_level+1])
+        col_offset += col_dim
+        row_offset += row_dim
     end
     return block_mat
 end
@@ -271,13 +229,12 @@ function vira_reps_total(reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}})
 end
 
 function gram_matrix_level(level::Int, reps::Vector{Vector{SparseMatrixCSC{Float64,Int64}}}, gram_lower::Vector{SparseMatrixCSC{Float64,Int64}})
-    basis = CANONICALBASIS[level+1]
-    dim = length(basis)
+    dim = dim_level(level)
     gram = spzeros(Float64, dim, dim)
-    for bra in basis, ket in basis
+    for bra in canonicalbasis(level), ket in canonicalbasis(level)
         level == 0 && (gram[bra, ket] = 1.0; continue)
-        highest_level_bra, highest_power_bra = bra.basis[1]
-        remaining_bra = DescendentBasis([highest_level_bra => highest_power_bra - 1; bra.basis[2:end]...])
+        highest_level_bra = bra[1]
+        remaining_bra = bra[2:end]
         remaining_bra_level = level + highest_level_bra
         actioning_operator = -highest_level_bra
 

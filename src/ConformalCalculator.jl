@@ -1,13 +1,11 @@
 module ConformalCalculator
 
-using LinearAlgebra, SparseArrays
+using LinearAlgebra, SparseArrays, Combinatorics
 export O, HoloPoly, evaluation, derivative, Witt_action, Lie_action, deexponentialize, exp_Lie_action
-export DescendentBasis, iscanonical, canonicalbasis, canonicalbasis_plain, once_canonicalize, Descendent, vira_iter_solver, vira_reps_total, gram_matrix
-export CANONICALBASIS, CANONICALBASIS_PLAIN
+export iscanonical, once_canonicalize, Descendent, vira_iter_solver, vira_reps_total, gram_matrix
 
 include("./functionring.jl")
 include("./deexponentialize.jl")
 include("./conformalfamily.jl")
-include("./canonicalbasis_buffer.jl")
 
 end
